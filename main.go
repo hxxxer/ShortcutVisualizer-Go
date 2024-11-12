@@ -154,9 +154,18 @@ func (w *MainWindow) onSelected(uid string) {
 
 func (w *MainWindow) onDoubleClick(uid string) {
 	if path, ok := w.shortcuts[uid]; ok {
-		// 检查是否为快捷方式文件
 		if strings.HasSuffix(strings.ToLower(path), ".lnk") {
+			// 如果是快捷方式，则打开它
 			w.openShortcut(path)
+		} else {
+			// 如果是文件夹，则切换其展开/折叠状态
+			if w.tree.IsBranch(uid) {
+				if w.tree.IsBranchOpen(uid) {
+					w.tree.CloseBranch(uid)
+				} else {
+					w.tree.OpenBranch(uid)
+				}
+			}
 		}
 	}
 }
@@ -188,6 +197,9 @@ func (w *MainWindow) populateTree(folderPath string) {
 
 	// 刷新树形控件
 	w.tree.Refresh()
+
+	// 自动展开根节点
+	w.tree.OpenBranch("root")
 }
 
 func (w *MainWindow) traverseFolder(path string, parentID string) {
@@ -223,6 +235,7 @@ func (w *MainWindow) traverseFolder(path string, parentID string) {
 func main() {
 	a := app.New()
 	w := NewMainWindow(a)
-	w.window.Resize(fyne.NewSize(400, 600))
+
+	w.window.Resize(fyne.NewSize(600, 600))
 	w.window.ShowAndRun()
 }
