@@ -28,7 +28,7 @@ type MainWindow struct {
 
 func NewMainWindow(app fyne.App) *MainWindow {
 	w := &MainWindow{
-		window:    app.NewWindow("快捷方式浏览器"),
+		window:    app.NewWindow("打开软件"),
 		shortcuts: make(map[string]string),
 		nodes:     make(map[string][]string),
 	}
