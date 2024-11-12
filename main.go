@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -10,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -43,7 +46,12 @@ func (w *MainWindow) createUI() {
 	w.browseBtn = widget.NewButton("浏览", w.browseFolderDialog)
 
 	// 创建树形控件
-	w.tree = widget.NewTree(w.childUIDs, w.isBranch, w.createNode, w.updateNode)
+	w.tree = widget.NewTree(
+		w.childUIDs,
+		w.isBranch,
+		w.createNode,
+		w.updateNode,
+	)
 
 	// 设置双击处理
 	w.tree.OnSelected = w.onDoubleClick
@@ -112,15 +120,32 @@ func (w *MainWindow) updateNode(uid string, branch bool, node fyne.CanvasObject)
 
 	if branch {
 		icon.SetResource(theme.FolderIcon())
+		if uid == "root" {
+			label.SetText(filepath.Base(w.pathEntry.Text))
+		} else {
+			label.SetText(filepath.Base(w.shortcuts[uid]))
+		}
 	} else {
 		icon.SetResource(theme.FileIcon())
+		// 对快捷方式文件名进行清理
+		filename := filepath.Base(w.shortcuts[uid])
+		cleanName := cleanShortcutName(filename)
+		label.SetText(cleanName)
+	}
+}
+
+// 添加一个新的辅助函数来处理文件名
+func cleanShortcutName(filename string) string {
+	// 移除 .lnk 后缀
+	name := strings.TrimSuffix(filename, ".lnk")
+
+	// 使用正则表达式移除 ".exe - 快捷方式" 模式
+	re := regexp.MustCompile(`(.+)\.exe.*$`)
+	if match := re.FindStringSubmatch(name); len(match) > 1 {
+		name = match[1]
 	}
 
-	if uid == "root" {
-		label.SetText(filepath.Base(w.pathEntry.Text))
-	} else {
-		label.SetText(filepath.Base(w.shortcuts[uid]))
-	}
+	return name
 }
 
 func (w *MainWindow) onSelected(uid string) {
@@ -139,7 +164,7 @@ func (w *MainWindow) onDoubleClick(uid string) {
 func (w *MainWindow) openShortcut(path string) {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/c", "start", "", path)
+		cmd = exec.Command("explorer", path)
 	} else {
 		// 在其他系统上可能需要不同的处理方式
 		return
@@ -198,6 +223,6 @@ func (w *MainWindow) traverseFolder(path string, parentID string) {
 func main() {
 	a := app.New()
 	w := NewMainWindow(a)
-	w.window.Resize(fyne.NewSize(800, 600))
+	w.window.Resize(fyne.NewSize(400, 600))
 	w.window.ShowAndRun()
 }
