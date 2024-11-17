@@ -3,12 +3,15 @@
 package main
 
 import (
+	"bytes"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"image"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,7 +129,14 @@ func (w *MainWindow) updateNode(uid string, branch bool, node fyne.CanvasObject)
 			label.SetText(filepath.Base(w.shortcuts[uid]))
 		}
 	} else {
-		icon.SetResource(theme.FileIcon())
+		absPath, _ := filepath.Abs(w.shortcuts[uid])
+		img, _ := GetFileIcon2Image(absPath)
+		resource, _ := ImageToResource(img)
+		if resource == nil || img == nil {
+			icon.SetResource(theme.FileIcon())
+		} else {
+			icon.SetResource(resource)
+		}
 		// 对快捷方式文件名进行清理
 		filename := filepath.Base(w.shortcuts[uid])
 		cleanName := cleanShortcutName(filename)
@@ -146,6 +156,24 @@ func cleanShortcutName(filename string) string {
 	}
 
 	return name
+}
+
+// ImageToResource 将image.Image转换为fyne.Resource
+func ImageToResource(img image.Image) (fyne.Resource, error) {
+	// 创建一个buffer来存储PNG数据
+	var buf bytes.Buffer
+
+	// 将image编码为PNG格式
+	err := png.Encode(&buf, img)
+	if err != nil {
+		return nil, err
+	}
+
+	// 创建fyne的StaticResource
+	// 使用当前时间戳作为唯一资源名
+	resource := fyne.NewStaticResource("icon.png", buf.Bytes())
+
+	return resource, nil
 }
 
 func (w *MainWindow) onSelected(uid string) {
