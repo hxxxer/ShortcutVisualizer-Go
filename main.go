@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -18,15 +19,20 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 )
 
+var test1Res fyne.Resource
+
 type MainWindow struct {
-	window    fyne.Window
-	tree      *widget.Tree
-	pathEntry *widget.Entry
-	browseBtn *widget.Button
-	shortcuts map[string]string   // 存储路径映射
-	nodes     map[string][]string // 存储节点层级关系
+	window         fyne.Window
+	tree           *widget.Tree
+	pathEntry      *widget.Entry
+	browseBtn      *widget.Button
+	shortcuts      map[string]string        // 存储路径映射
+	nodes          map[string][]string      // 存储节点层级关系
+	iconCache      map[string]fyne.Resource // 新增：图标缓存
+	iconCacheMutex sync.RWMutex             // 新增：缓存互斥锁
 }
 
 func NewMainWindow(app fyne.App) *MainWindow {
@@ -34,6 +40,7 @@ func NewMainWindow(app fyne.App) *MainWindow {
 		window:    app.NewWindow("打开软件"),
 		shortcuts: make(map[string]string),
 		nodes:     make(map[string][]string),
+		iconCache: make(map[string]fyne.Resource), // 新增：初始化图标缓存
 	}
 
 	w.createUI()
@@ -130,13 +137,9 @@ func (w *MainWindow) updateNode(uid string, branch bool, node fyne.CanvasObject)
 		}
 	} else {
 		absPath, _ := filepath.Abs(w.shortcuts[uid])
-		img, _ := GetFileIcon2Image(absPath)
-		resource, _ := ImageToResource(img)
-		if resource == nil || img == nil {
-			icon.SetResource(theme.FileIcon())
-		} else {
-			icon.SetResource(resource)
-		}
+		icon.SetResource(w.getIconResource(absPath)) // 使用缓存机制获取图标
+		//icon.SetResource(test1Res)
+		//icon.SetResource(theme.FileIcon())
 		// 对快捷方式文件名进行清理
 		filename := filepath.Base(w.shortcuts[uid])
 		cleanName := cleanShortcutName(filename)
@@ -158,6 +161,35 @@ func cleanShortcutName(filename string) string {
 	return name
 }
 
+// 新增：获取图标的方法
+func (w *MainWindow) getIconResource(absPath string) fyne.Resource {
+	// 先检查缓存
+	w.iconCacheMutex.RLock()
+	if resource, exists := w.iconCache[absPath]; exists {
+		w.iconCacheMutex.RUnlock()
+		return resource
+	}
+	w.iconCacheMutex.RUnlock()
+
+	// 缓存中不存在，创建新的图标
+	img, err := GetFileIcon2Image(absPath)
+	if err != nil || img == nil {
+		return theme.FileIcon()
+	}
+
+	resource, err := ImageToResource(img)
+	if err != nil || resource == nil {
+		return theme.FileIcon()
+	}
+
+	// 将新创建的图标存入缓存
+	w.iconCacheMutex.Lock()
+	w.iconCache[absPath] = resource
+	w.iconCacheMutex.Unlock()
+
+	return resource
+}
+
 // ImageToResource 将image.Image转换为fyne.Resource
 func ImageToResource(img image.Image) (fyne.Resource, error) {
 	// 创建一个buffer来存储PNG数据
@@ -171,9 +203,14 @@ func ImageToResource(img image.Image) (fyne.Resource, error) {
 
 	// 创建fyne的StaticResource
 	// 使用当前时间戳作为唯一资源名
-	resource := fyne.NewStaticResource("icon.png", buf.Bytes())
+	return fyne.NewStaticResource("icon", buf.Bytes()), nil
+}
 
-	return resource, nil
+// 新增：清理缓存的方法
+func (w *MainWindow) clearIconCache() {
+	w.iconCacheMutex.Lock()
+	w.iconCache = make(map[string]fyne.Resource)
+	w.iconCacheMutex.Unlock()
 }
 
 func (w *MainWindow) onSelected(uid string) {
@@ -215,6 +252,7 @@ func (w *MainWindow) openShortcut(path string) {
 
 func (w *MainWindow) populateTree(folderPath string) {
 	// 清理原有数据
+	w.clearIconCache() // 新增：清理图标缓存
 	w.shortcuts = make(map[string]string)
 	w.nodes = make(map[string][]string)
 
@@ -260,7 +298,31 @@ func (w *MainWindow) traverseFolder(path string, parentID string) {
 	w.nodes[parentID] = children
 }
 
+func loadPNGFromFile2Resource(filePath string) (fyne.Resource, error) {
+	// 直接读取文件内容，无需手动打开关闭
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("读取文件失败: %w", err)
+	}
+
+	// 验证文件格式
+	if !isPNG(data) {
+		return nil, fmt.Errorf("非PNG格式文件")
+	}
+
+	// 获取文件名作为resource名
+	resourceName := filepath.Base(filePath)
+
+	return fyne.NewStaticResource(resourceName, data), nil
+}
+
+// 通过魔数检查是否为PNG文件
+func isPNG(data []byte) bool {
+	return len(data) > 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n"
+}
+
 func main() {
+	test1Res, _ = loadPNGFromFile2Resource(`C:\Users\15641\Pictures\Gear-Tree Icon2.png`)
 	a := app.New()
 	w := NewMainWindow(a)
 
