@@ -103,8 +103,8 @@ func GetFileIcon(filePath string) (uintptr, error) {
 	//return shfi.hIcon, nil
 }
 
-// IconToImage 将图标句柄转换为image.Image
-func IconToImage(hIcon uintptr) (image.Image, error) {
+// ToImage 将图标句柄转换为image.Image
+func ToImage(hIcon uintptr) (image.Image, error) {
 	var iconInfo ICONINFO
 	ret, _, _ := procGetIconInfo.Call(hIcon, uintptr(unsafe.Pointer(&iconInfo)))
 	if ret == 0 {
@@ -164,11 +164,11 @@ func IconToImage(hIcon uintptr) (image.Image, error) {
 		return nil, fmt.Errorf("GetDIBits failed")
 	}
 
-	img := image.NewRGBA(image.Rect(0, 0, int(bm.bmWidth), int(bm.bmHeight)))
+	img := image.NewNRGBA(image.Rect(0, 0, int(bm.bmWidth), int(bm.bmHeight)))
 	for y := 0; y < int(bm.bmHeight); y++ {
 		for x := 0; x < int(bm.bmWidth); x++ {
 			i := (int(bm.bmHeight)-y-1)*int(bm.bmWidth)*4 + x*4
-			img.Set(x, y, color.RGBA{
+			img.Set(x, y, color.NRGBA{
 				B: pixels[i],
 				G: pixels[i+1],
 				R: pixels[i+2],
@@ -238,7 +238,7 @@ func IconToPNG(iconHandle uintptr, outputPath string) (image.Image, error) {
 }
 */
 
-// 销毁图标
+// DestroyIcon 销毁图标
 func DestroyIcon(hIcon uintptr) {
 	if hIcon != 0 {
 		user32.NewProc("DestroyIcon").Call(hIcon)
@@ -255,7 +255,7 @@ func GetFileIcon2Image(filePath string) (image.Image, error) {
 	defer DestroyIcon(hIcon)
 
 	// 转换为image.Image
-	iconImage, err := IconToImage(hIcon)
+	iconImage, err := ToImage(hIcon)
 	if err != nil {
 		fmt.Printf("Error converting icon to image: %v\n", err)
 		return nil, err
